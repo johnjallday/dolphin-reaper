@@ -25,6 +25,7 @@ type reaperTool struct {
 
 // Ensure compile-time conformance.
 var _ pluginapi.Tool = reaperTool{}
+var _ pluginapi.VersionedTool = reaperTool{}
 
 // -------- Helper functions --------
 
@@ -276,6 +277,15 @@ func (t reaperTool) handleRunScript(script string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("Successfully launched REAPER script: %s", script), nil
+}
+
+// Version returns the plugin version.
+func (t reaperTool) Version() string {
+	versionBytes, err := os.ReadFile("VERSION")
+	if err != nil {
+		return "0.0.1"
+	}
+	return strings.TrimSpace(string(versionBytes))
 }
 
 // Tool is the exported symbol the host looks up via plugin.Open().Lookup("Tool").
