@@ -450,8 +450,8 @@ func (t reaperTool) handleGetSettings() (string, error) {
 	return fmt.Sprintf("🎵 REAPER Script Manager Settings:\n\n"+
 		"- Scripts Directory: %s\n"+
 		"- Initialized: %t\n\n"+
-		"Available scripts: %d", 
-		settings.ScriptsDir, 
+		"Available scripts: %d",
+		settings.ScriptsDir,
 		settings.Initialized,
 		func() int {
 			if scripts, err := listLuaScripts(settings.ScriptsDir); err == nil {
@@ -468,12 +468,12 @@ func (t reaperTool) handleInitSetup() (string, error) {
 		if scripts, err := listLuaScripts(settings.ScriptsDir); err == nil {
 			scriptCount = len(scripts)
 		}
-		
+
 		return fmt.Sprintf("🎵 REAPER Script Manager is already set up and ready to use.\n\n"+
 			"Current settings:\n"+
 			"- Scripts Directory: %s\n"+
 			"- Available Scripts: %d\n\n"+
-			"Use operation 'get_settings' to view detailed configuration or 'list' to see available scripts.", 
+			"Use operation 'get_settings' to view detailed configuration or 'list' to see available scripts.",
 			settings.ScriptsDir, scriptCount), nil
 	}
 
@@ -509,6 +509,13 @@ func (t reaperTool) handleCompleteSetup(scriptsDir string) (string, error) {
 		return "", fmt.Errorf("failed to update settings: %w", err)
 	}
 
+	// Ensure settings are persisted to agent_settings.json
+	if t.agentContext != nil {
+		if err := globalSettings.persistToAgentSettings(expandedDir, t.agentContext); err != nil {
+			fmt.Printf("Warning: Failed to persist settings to agent_settings.json: %v\n", err)
+		}
+	}
+
 	// Count available scripts
 	scripts, err := listLuaScripts(expandedDir)
 	scriptCount := 0
@@ -523,7 +530,7 @@ func (t reaperTool) handleCompleteSetup(scriptsDir string) (string, error) {
 		"The plugin is now ready to use. You can:\n"+
 		"- Use 'list' to see available scripts\n"+
 		"- Use 'run' to launch a specific script\n"+
-		"- Use 'get_settings' to view current configuration", 
+		"- Use 'get_settings' to view current configuration",
 		expandedDir, scriptCount), nil
 }
 
@@ -532,20 +539,20 @@ func expandTilde(path string) (string, error) {
 	if !strings.HasPrefix(path, "~") {
 		return path, nil
 	}
-	
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	
+
 	if path == "~" {
 		return homeDir, nil
 	}
-	
+
 	if strings.HasPrefix(path, "~/") {
 		return filepath.Join(homeDir, path[2:]), nil
 	}
-	
+
 	return path, nil
 }
 
@@ -582,7 +589,7 @@ func (t reaperTool) IsInitialized() bool {
 func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 	t.agentContext = &ctx
 
-	// Only persist settings if already initialized, don't auto-initialize
+	// Always persist settings if already initialized
 	if globalSettings.IsInitialized() {
 		scriptsDir := getCurrentScriptsDir()
 		if updateErr := globalSettings.UpdateSettings(scriptsDir, true, t.agentContext); updateErr != nil {
