@@ -56,18 +56,18 @@ func (sm *SettingsManager) UpdateSettings(scriptsDir string, initialized bool, a
 	if sm.settings == nil {
 		sm.settings = sm.getDefaultSettings()
 	}
-	
+
 	// Update in-memory settings
 	if scriptsDir != "" {
 		sm.settings.ScriptsDir = scriptsDir
 	}
 	sm.settings.Initialized = initialized
-	
+
 	// If we have agent context, also persist to agent_settings.json
 	if agentContext != nil {
 		return sm.persistToAgentSettings(scriptsDir, agentContext)
 	}
-	
+
 	return nil
 }
 
@@ -93,7 +93,7 @@ func (sm *SettingsManager) persistToAgentSettings(scriptsDir string, agentContex
 	if scriptsDir != "" {
 		reaperSettings["scripts_dir"] = scriptsDir
 	}
-	
+
 	reaperSettings["initialized"] = sm.settings.Initialized
 
 	if err := os.MkdirAll(filepath.Dir(settingsFilePath), 0755); err != nil {
@@ -134,7 +134,7 @@ func (sm *SettingsManager) IsInitialized() bool {
 func (sm *SettingsManager) getDefaultSettings() *Settings {
 	return &Settings{
 		ScriptsDir:  defaultScriptsDir(),
-		Initialized: true, // Auto-initialize with default scripts directory
+		Initialized: false, // Require explicit setup
 	}
 }
 
@@ -279,19 +279,23 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "reaper_manager",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts or launch them"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, or configure setup"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
-					"description": "Operation to perform: 'list' to see available scripts, 'run' to launch a script",
-					"enum":        []string{"list", "run"},
+					"description": "Operation to perform",
+					"enum":        []string{"list", "run", "get_settings", "init_setup", "complete_setup"},
 				},
 				"script": map[string]any{
 					"type":        "string",
 					"description": "Base name of the ReaScript (without .lua). Required only for 'run' operation.",
 					"enum":        enum, // may be nil/empty if directory unreadable; that's fine
+				},
+				"scripts_dir": map[string]any{
+					"type":        "string",
+					"description": "Path to REAPER Scripts directory (required for complete_setup)",
 				},
 			},
 			"required": []string{"operation"},
@@ -301,21 +305,42 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 	var p struct {
-		Operation string `json:"operation"`
-		Script    string `json:"script"`
+		Operation  string `json:"operation"`
+		Script     string `json:"script"`
+		ScriptsDir string `json:"scripts_dir"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
 		return "", err
 	}
 
+	// Allow certain operations even when not initialized
+	allowedWhenUninitialized := []string{"get_settings", "init_setup", "complete_setup"}
+	operationAllowed := false
+	for _, allowed := range allowedWhenUninitialized {
+		if p.Operation == allowed {
+			operationAllowed = true
+			break
+		}
+	}
+
+	// Auto-initialize prompt if not initialized and operation requires it
+	if !globalSettings.IsInitialized() && !operationAllowed {
+		return t.handleInitSetup()
+	}
+
 	switch p.Operation {
 	case "list":
 		return t.handleListScripts()
-		//return listLuaScripts(t.scriptsDir)
 	case "run":
 		return t.handleRunScript(p.Script)
+	case "get_settings":
+		return t.handleGetSettings()
+	case "init_setup":
+		return t.handleInitSetup()
+	case "complete_setup":
+		return t.handleCompleteSetup(p.ScriptsDir)
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Use 'list' or 'run'", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, get_settings, init_setup, complete_setup", p.Operation)
 	}
 }
 
@@ -420,6 +445,110 @@ func (t reaperTool) handleRunScript(script string) (string, error) {
 	return fmt.Sprintf("Successfully launched REAPER script: %s", script), nil
 }
 
+func (t reaperTool) handleGetSettings() (string, error) {
+	settings := globalSettings.getCurrentSettings()
+	return fmt.Sprintf("🎵 REAPER Script Manager Settings:\n\n"+
+		"- Scripts Directory: %s\n"+
+		"- Initialized: %t\n\n"+
+		"Available scripts: %d", 
+		settings.ScriptsDir, 
+		settings.Initialized,
+		func() int {
+			if scripts, err := listLuaScripts(settings.ScriptsDir); err == nil {
+				return len(scripts)
+			}
+			return 0
+		}()), nil
+}
+
+func (t reaperTool) handleInitSetup() (string, error) {
+	if globalSettings.IsInitialized() {
+		settings := globalSettings.getCurrentSettings()
+		scriptCount := 0
+		if scripts, err := listLuaScripts(settings.ScriptsDir); err == nil {
+			scriptCount = len(scripts)
+		}
+		
+		return fmt.Sprintf("🎵 REAPER Script Manager is already set up and ready to use.\n\n"+
+			"Current settings:\n"+
+			"- Scripts Directory: %s\n"+
+			"- Available Scripts: %d\n\n"+
+			"Use operation 'get_settings' to view detailed configuration or 'list' to see available scripts.", 
+			settings.ScriptsDir, scriptCount), nil
+	}
+
+	defaultDir := defaultScriptsDir()
+	return fmt.Sprintf("🎵 Welcome to REAPER Script Manager!\n\n"+
+		"This is your first time using the plugin. Please complete the setup by providing:\n\n"+
+		"**Scripts Directory** - Path to your REAPER Scripts folder where .lua files are stored\n"+
+		"   Default suggestion: %s\n\n"+
+		"Please use operation 'complete_setup' with scripts_dir parameter to finish the setup.\n\n"+
+		"Example: reaper_manager(operation=\"complete_setup\", scripts_dir=\"%s\")\n\n"+
+		"You can also specify a custom path if your REAPER Scripts are in a different location.",
+		defaultDir, defaultDir), nil
+}
+
+func (t reaperTool) handleCompleteSetup(scriptsDir string) (string, error) {
+	if scriptsDir == "" {
+		return "", fmt.Errorf("scripts_dir is required for complete_setup operation")
+	}
+
+	// Expand tilde if present
+	expandedDir, err := expandTilde(scriptsDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand home directory in scripts path %q: %w", scriptsDir, err)
+	}
+
+	// Validate the directory exists
+	if _, err := os.Stat(expandedDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("scripts directory does not exist: %s", expandedDir)
+	}
+
+	// Update settings with new directory and mark as initialized
+	if err := globalSettings.UpdateSettings(expandedDir, true, t.agentContext); err != nil {
+		return "", fmt.Errorf("failed to update settings: %w", err)
+	}
+
+	// Count available scripts
+	scripts, err := listLuaScripts(expandedDir)
+	scriptCount := 0
+	if err == nil {
+		scriptCount = len(scripts)
+	}
+
+	return fmt.Sprintf("✅ REAPER Script Manager setup completed successfully!\n\n"+
+		"Configuration:\n"+
+		"- Scripts Directory: %s\n"+
+		"- Available Scripts: %d\n\n"+
+		"The plugin is now ready to use. You can:\n"+
+		"- Use 'list' to see available scripts\n"+
+		"- Use 'run' to launch a specific script\n"+
+		"- Use 'get_settings' to view current configuration", 
+		expandedDir, scriptCount), nil
+}
+
+// expandTilde expands ~ to the user's home directory in a path
+func expandTilde(path string) (string, error) {
+	if !strings.HasPrefix(path, "~") {
+		return path, nil
+	}
+	
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	
+	if path == "~" {
+		return homeDir, nil
+	}
+	
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(homeDir, path[2:]), nil
+	}
+	
+	return path, nil
+}
+
 // Version returns the plugin version.
 // Version information set at build time via -ldflags
 var (
@@ -452,12 +581,14 @@ func (t reaperTool) IsInitialized() bool {
 // SetAgentContext provides the current agent information to the plugin
 func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 	t.agentContext = &ctx
-	
-	// Initialize settings and persist to agent_settings.json on context setup
-	scriptsDir := getCurrentScriptsDir()
-	if updateErr := globalSettings.UpdateSettings(scriptsDir, true, t.agentContext); updateErr != nil {
-		// Log the error but don't fail the operation
-		fmt.Printf("Warning: Failed to update REAPER settings: %v\n", updateErr)
+
+	// Only persist settings if already initialized, don't auto-initialize
+	if globalSettings.IsInitialized() {
+		scriptsDir := getCurrentScriptsDir()
+		if updateErr := globalSettings.UpdateSettings(scriptsDir, true, t.agentContext); updateErr != nil {
+			// Log the error but don't fail the operation
+			fmt.Printf("Warning: Failed to update REAPER settings: %v\n", updateErr)
+		}
 	}
 }
 
