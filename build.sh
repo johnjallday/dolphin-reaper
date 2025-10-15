@@ -14,10 +14,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-PLUGIN_NAME="reascript_launcher"
-OUTPUT_NAME="reascript_launcher.so"
+PLUGIN_NAME="dolphin-reaper"
+OUTPUT_NAME="dolphin-reaper"
 
-echo -e "${BLUE}Building dolphin-reaper plugin...${NC}"
+echo -e "${BLUE}Building dolphin-reaper RPC plugin...${NC}"
 
 # Update dependencies
 echo -e "${YELLOW}Updating dependencies...${NC}"
@@ -29,12 +29,12 @@ BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 echo -e "${BLUE}Version: $VERSION${NC}"
-echo -e "${BLUE}Build Time: $BUILD_TIME${NC}" 
+echo -e "${BLUE}Build Time: $BUILD_TIME${NC}"
 echo -e "${BLUE}Git Commit: $GIT_COMMIT${NC}"
 
-# Build the plugin with embedded version
-echo -e "${YELLOW}Building plugin binary with embedded version...${NC}"
-if go build -buildmode=plugin \
+# Build as standalone executable (RPC plugin)
+echo -e "${YELLOW}Building RPC plugin executable with embedded version...${NC}"
+if go build \
     -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT" \
     -o "$OUTPUT_NAME" main.go; then
   echo -e "${GREEN}✓ Successfully built $OUTPUT_NAME${NC}"

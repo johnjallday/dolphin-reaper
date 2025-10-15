@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/go-plugin"
 	"github.com/johnjallday/dolphin-agent/pluginapi"
 	"github.com/johnjallday/dolphin-reaper-plugin/pkg/scripts"
 	"github.com/johnjallday/dolphin-reaper-plugin/pkg/settings"
@@ -113,8 +114,15 @@ func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 	t.agentContext = &ctx
 }
 
-// Tool is the exported symbol the host looks up via plugin.Open().Lookup("Tool").
-var Tool = reaperTool{
-	settingsManager: globalSettingsManager,
+func main() {
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: pluginapi.Handshake,
+		Plugins: map[string]plugin.Plugin{
+			"tool": &pluginapi.ToolRPCPlugin{Impl: &reaperTool{
+				settingsManager: globalSettingsManager,
+			}},
+		},
+		GRPCServer: plugin.DefaultGRPCServer,
+	})
 }
 
