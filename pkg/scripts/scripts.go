@@ -134,3 +134,31 @@ func (m *Manager) RunScript(script string) (string, error) {
 	}
 	return fmt.Sprintf("Successfully launched REAPER script: %s", script), nil
 }
+
+// DeleteScript deletes a script file from the scripts directory
+func (m *Manager) DeleteScript(script string) (string, error) {
+	if strings.TrimSpace(script) == "" {
+		return "", errors.New("script name is required for 'delete' operation")
+	}
+
+	// Add .lua extension if not present
+	scriptFile := script
+	if !strings.HasSuffix(strings.ToLower(scriptFile), ".lua") {
+		scriptFile = script + ".lua"
+	}
+
+	// Construct full path
+	scriptPath := fmt.Sprintf("%s/%s", m.scriptsDir, scriptFile)
+
+	// Check if file exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("script not found: %s", script)
+	}
+
+	// Delete the file
+	if err := os.Remove(scriptPath); err != nil {
+		return "", fmt.Errorf("failed to delete script %s: %w", script, err)
+	}
+
+	return fmt.Sprintf("Successfully deleted REAPER script: %s", script), nil
+}

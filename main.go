@@ -44,18 +44,18 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "reaper_manager",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, or configure setup"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, delete them, or configure setup"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "get_settings"},
+					"enum":        []string{"list", "run", "delete", "get_settings"},
 				},
 				"script": map[string]any{
 					"type":        "string",
-					"description": "Base name of the ReaScript (without .lua). Required only for 'run' operation.",
+					"description": "Base name of the ReaScript (without .lua). Required for 'run' and 'delete' operations.",
 					"enum":        enum, // may be nil/empty if directory unreadable; that's fine
 				},
 			},
@@ -83,10 +83,12 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		return scriptsManager.ListScripts()
 	case "run":
 		return scriptsManager.RunScript(p.Script)
+	case "delete":
+		return scriptsManager.DeleteScript(p.Script)
 	case "get_settings":
 		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, delete, get_settings", p.Operation)
 	}
 }
 
