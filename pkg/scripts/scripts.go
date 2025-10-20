@@ -41,26 +41,26 @@ func ToTitleCase(s string) string {
 	return strings.Join(words, " ")
 }
 
-// Manager handles script operations
-type Manager struct {
+// ScriptManager handles script operations
+type ScriptManager struct {
 	scriptsDir string
 }
 
-// NewManager creates a new script manager with the given scripts directory
-func NewManager(scriptsDir string) *Manager {
-	return &Manager{scriptsDir: scriptsDir}
+// NewScriptManager creates a new script manager with the given scripts directory
+func NewScriptManager(scriptsDir string) *ScriptManager {
+	return &ScriptManager{scriptsDir: scriptsDir}
 }
 
 // ListScripts returns a structured list of available scripts
-func (m *Manager) ListScripts() (string, error) {
+func (sm *ScriptManager) ListScripts() (string, error) {
 	// Get fresh list of scripts from the directory
-	scripts, err := ListLuaScripts(m.scriptsDir)
+	scripts, err := ListLuaScripts(sm.scriptsDir)
 	if err != nil {
-		return "", fmt.Errorf("failed to list scripts in %s: %w", m.scriptsDir, err)
+		return "", fmt.Errorf("failed to list scripts in %s: %w", sm.scriptsDir, err)
 	}
 
 	if len(scripts) == 0 {
-		return fmt.Sprintf("No ReaScripts (.lua files) found in: %s", m.scriptsDir), nil
+		return fmt.Sprintf("No ReaScripts (.lua files) found in: %s", sm.scriptsDir), nil
 	}
 
 	var scriptItems []types.ScriptItem
@@ -80,7 +80,7 @@ func (m *Manager) ListScripts() (string, error) {
 		Type:        "reaper_script_list",
 		Title:       "🎵 Available REAPER Scripts",
 		Count:       len(scripts),
-		Location:    m.scriptsDir,
+		Location:    sm.scriptsDir,
 		Scripts:     scriptItems,
 		Instruction: "To run a script, say: \"Run the [script_name] script\"",
 	}
@@ -89,14 +89,14 @@ func (m *Manager) ListScripts() (string, error) {
 	jsonData, err := json.Marshal(result)
 	if err != nil {
 		// Fallback to markdown format if JSON marshaling fails
-		return m.listScriptsMarkdown(scripts)
+		return sm.listScriptsMarkdown(scripts)
 	}
 
 	return "STRUCTURED_DATA:" + string(jsonData), nil
 }
 
 // listScriptsMarkdown returns a markdown-formatted list of scripts
-func (m *Manager) listScriptsMarkdown(scripts []string) (string, error) {
+func (sm *ScriptManager) listScriptsMarkdown(scripts []string) (string, error) {
 	// Fallback markdown format
 	result := fmt.Sprintf("## 🎵 Available REAPER Scripts (%d found)\n\n", len(scripts))
 	result += "| # | Script Name | Action |\n"
@@ -108,14 +108,14 @@ func (m *Manager) listScriptsMarkdown(scripts []string) (string, error) {
 		result += fmt.Sprintf("| %d | **%s** | `%s` |\n", i+1, displayName, script)
 	}
 
-	result += fmt.Sprintf("\n📂 **Location:** `%s`\n", m.scriptsDir)
+	result += fmt.Sprintf("\n📂 **Location:** `%s`\n", sm.scriptsDir)
 	result += "\n💡 **To run a script, say:** *\"Run the [script_name] script\"*"
 
 	return result, nil
 }
 
 // RunScript launches a script in REAPER
-func (m *Manager) RunScript(script string) (string, error) {
+func (sm *ScriptManager) RunScript(script string) (string, error) {
 	if strings.TrimSpace(script) == "" {
 		return "", errors.New("script name is required for 'run' operation")
 	}
@@ -129,14 +129,14 @@ func (m *Manager) RunScript(script string) (string, error) {
 		return "REAPER is not running. Please start REAPER first, then try running the script again.", nil
 	}
 
-	if err := platform.LaunchScript(m.scriptsDir, script); err != nil {
+	if err := platform.LaunchScript(sm.scriptsDir, script); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Successfully launched REAPER script: %s", script), nil
 }
 
 // DeleteScript deletes a script file from the scripts directory
-func (m *Manager) DeleteScript(script string) (string, error) {
+func (sm *ScriptManager) DeleteScript(script string) (string, error) {
 	if strings.TrimSpace(script) == "" {
 		return "", errors.New("script name is required for 'delete' operation")
 	}
@@ -148,7 +148,7 @@ func (m *Manager) DeleteScript(script string) (string, error) {
 	}
 
 	// Construct full path
-	scriptPath := fmt.Sprintf("%s/%s", m.scriptsDir, scriptFile)
+	scriptPath := fmt.Sprintf("%s/%s", sm.scriptsDir, scriptFile)
 
 	// Check if file exists
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
@@ -161,4 +161,52 @@ func (m *Manager) DeleteScript(script string) (string, error) {
 	}
 
 	return fmt.Sprintf("Successfully deleted REAPER script: %s", script), nil
+}
+
+// AddScript adds a new script file to the scripts directory
+// Supports .lua, .eel, and .py extensions
+func (sm *ScriptManager) AddScript(scriptName, content, scriptType string) (string, error) {
+	if strings.TrimSpace(scriptName) == "" {
+		return "", errors.New("script name is required for 'add' operation")
+	}
+
+	if strings.TrimSpace(content) == "" {
+		return "", errors.New("script content is required for 'add' operation")
+	}
+
+	// Validate and normalize script type
+	var extension string
+	switch strings.ToLower(scriptType) {
+	case "lua", ".lua":
+		extension = ".lua"
+	case "eel", ".eel":
+		extension = ".eel"
+	case "py", "python", ".py":
+		extension = ".py"
+	default:
+		return "", fmt.Errorf("unsupported script type: %s. Supported types: lua, eel, py", scriptType)
+	}
+
+	// Remove extension from script name if already present
+	scriptName = strings.TrimSuffix(scriptName, ".lua")
+	scriptName = strings.TrimSuffix(scriptName, ".eel")
+	scriptName = strings.TrimSuffix(scriptName, ".py")
+
+	// Construct filename with proper extension
+	scriptFile := scriptName + extension
+
+	// Construct full path
+	scriptPath := fmt.Sprintf("%s/%s", sm.scriptsDir, scriptFile)
+
+	// Check if file already exists
+	if _, err := os.Stat(scriptPath); err == nil {
+		return "", fmt.Errorf("script already exists: %s", scriptFile)
+	}
+
+	// Write the file
+	if err := os.WriteFile(scriptPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write script %s: %w", scriptFile, err)
+	}
+
+	return fmt.Sprintf("Successfully added REAPER script: %s", scriptFile), nil
 }

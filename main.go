@@ -19,7 +19,6 @@ var globalSettingsManager = settings.NewManager()
 type reaperTool struct {
 	agentContext    *pluginapi.AgentContext
 	settingsManager *settings.Manager
-	scriptsManager  *scripts.Manager
 }
 
 // Ensure compile-time conformance.
@@ -44,21 +43,30 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "reaper_manager",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, delete them, or configure setup"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, or configure setup"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "delete", "get_settings"},
+					"enum":        []string{"list", "run", "add", "delete", "get_settings"},
 				},
 				"script": map[string]any{
 					"type":        "string",
-					"description": "Base name of the ReaScript (without .lua). Required for 'run' and 'delete' operations.",
+					"description": "Base name of the ReaScript (without extension). Required for 'run', 'add', and 'delete' operations.",
 					"enum":        enum, // may be nil/empty if directory unreadable; that's fine
 				},
+			"content": map[string]any{
+				"type":        "string",
+				"description": "Script content. Required for 'add' operation.",
 			},
+			"script_type": map[string]any{
+				"type":        "string",
+				"description": "Script type/extension. Required for 'add' operation. Valid values: lua, eel, py",
+				"enum":        []string{"lua", "eel", "py"},
+			},
+		},
 			"required": []string{"operation"},
 		},
 	}
@@ -67,28 +75,32 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 // Call handles the function call and dispatches to appropriate handlers
 func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 	var p struct {
-		Operation string `json:"operation"`
-		Script    string `json:"script"`
+		Operation  string `json:"operation"`
+		Script     string `json:"script"`
+		Content    string `json:"content"`
+		ScriptType string `json:"script_type"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
 		return "", err
 	}
 
-	// Get current scripts directory and create a scripts manager
+	// Get current scripts directory and create a script manager
 	scriptsDir := globalSettingsManager.GetCurrentScriptsDir()
-	scriptsManager := scripts.NewManager(scriptsDir)
+	scriptManager := scripts.NewScriptManager(scriptsDir)
 
 	switch p.Operation {
 	case "list":
-		return scriptsManager.ListScripts()
+		return scriptManager.ListScripts()
 	case "run":
-		return scriptsManager.RunScript(p.Script)
+		return scriptManager.RunScript(p.Script)
+	case "add":
+		return scriptManager.AddScript(p.Script, p.Content, p.ScriptType)
 	case "delete":
-		return scriptsManager.DeleteScript(p.Script)
+		return scriptManager.DeleteScript(p.Script)
 	case "get_settings":
 		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, delete, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, get_settings", p.Operation)
 	}
 }
 
