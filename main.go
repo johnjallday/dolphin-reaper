@@ -43,19 +43,23 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "reaper_manager",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, or configure setup"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, download scripts from repository, or configure setup"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "add", "delete", "get_settings"},
+					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "get_settings"},
 				},
 				"script": map[string]any{
 					"type":        "string",
 					"description": "Base name of the ReaScript (without extension). Required for 'run', 'add', and 'delete' operations.",
 					"enum":        enum, // may be nil/empty if directory unreadable; that's fine
+				},
+				"filename": map[string]any{
+					"type":        "string",
+					"description": "Full filename of the script to download (including extension). Required for 'download_script' operation.",
 				},
 			"content": map[string]any{
 				"type":        "string",
@@ -79,6 +83,7 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		Script     string `json:"script"`
 		Content    string `json:"content"`
 		ScriptType string `json:"script_type"`
+		Filename   string `json:"filename"`
 	}
 	if err := json.Unmarshal([]byte(args), &p); err != nil {
 		return "", err
@@ -97,10 +102,19 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		return scriptManager.AddScript(p.Script, p.Content, p.ScriptType)
 	case "delete":
 		return scriptManager.DeleteScript(p.Script)
+	case "list_available_scripts":
+		downloader := scripts.NewScriptDownloader()
+		return downloader.ListAvailableScripts()
+	case "download_script":
+		if p.Filename == "" {
+			return "", fmt.Errorf("filename is required for 'download_script' operation")
+		}
+		downloader := scripts.NewScriptDownloader()
+		return downloader.DownloadScript(p.Filename, scriptsDir)
 	case "get_settings":
 		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, get_settings", p.Operation)
 	}
 }
 

@@ -1,10 +1,13 @@
 package scripts
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/johnjallday/dolphin-reaper-plugin/pkg/platform"
