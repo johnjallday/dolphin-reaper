@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/go-plugin"
 	"github.com/johnjallday/dolphin-agent/pluginapi"
+	reapercontext "github.com/johnjallday/dolphin-reaper-plugin/pkg/context"
 	"github.com/johnjallday/dolphin-reaper-plugin/pkg/scripts"
 	"github.com/johnjallday/dolphin-reaper-plugin/pkg/settings"
 	"github.com/openai/openai-go/v2"
@@ -50,7 +51,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_settings"},
+					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context", "get_settings"},
 				},
 				"script": map[string]any{
 					"type":        "string",
@@ -120,10 +121,20 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		return scriptManager.RegisterAllScripts()
 	case "clean_scripts":
 		return scriptManager.CleanScripts()
+	case "get_context":
+		ctx, err := reapercontext.GetREAPERContext()
+		if err != nil {
+			return "", fmt.Errorf("failed to get REAPER context: %w", err)
+		}
+		contextJSON, err := json.Marshal(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal context: %w", err)
+		}
+		return string(contextJSON), nil
 	case "get_settings":
 		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context, get_settings", p.Operation)
 	}
 }
 

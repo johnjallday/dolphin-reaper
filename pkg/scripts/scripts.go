@@ -442,3 +442,10 @@ func (sm *ScriptManager) CleanScripts() (string, error) {
 
 	return fmt.Sprintf("Cleaned %d missing script(s) from reaper-kb.ini", removedCount), nil
 }
+
+// GetContext retrieves the current REAPER context
+func (sm *ScriptManager) GetContext() (string, error) {
+	// Import context package functionality inline to avoid circular imports
+	// We'll call the context reader directly from main.go instead
+	return "", fmt.Errorf("GetContext should be called directly from main.go using context package")
+}
