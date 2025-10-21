@@ -213,3 +213,171 @@ func (sm *ScriptManager) AddScript(scriptName, content, scriptType string) (stri
 
 	return fmt.Sprintf("Successfully added REAPER script: %s", scriptFile), nil
 }
+
+// GetReaperKBIniPath returns the platform-specific path to reaper-kb.ini
+func GetReaperKBIniPath() (string, error) {
+	var basePath string
+
+	switch runtime.GOOS {
+	case "darwin": // macOS
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %w", err)
+		}
+		basePath = filepath.Join(homeDir, "Library", "Application Support", "REAPER")
+
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			return "", errors.New("APPDATA environment variable not set")
+		}
+		basePath = filepath.Join(appData, "REAPER")
+
+	case "linux":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %w", err)
+		}
+		// Try common Linux paths
+		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+		if xdgConfig != "" {
+			basePath = filepath.Join(xdgConfig, "REAPER")
+		} else {
+			basePath = filepath.Join(homeDir, ".config", "REAPER")
+		}
+
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+
+	kbIniPath := filepath.Join(basePath, "reaper-kb.ini")
+
+	// Check if the file exists
+	if _, err := os.Stat(kbIniPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("reaper-kb.ini not found at %s (is REAPER installed?)", kbIniPath)
+	}
+
+	return kbIniPath, nil
+}
+
+// RegisterScript registers a script in REAPER's keyboard shortcuts file (reaper-kb.ini)
+func (sm *ScriptManager) RegisterScript(scriptName string) (string, error) {
+	if strings.TrimSpace(scriptName) == "" {
+		return "", errors.New("script name is required for 'register_script' operation")
+	}
+
+	// Add .lua extension if not present
+	scriptFile := scriptName
+	if !strings.HasSuffix(strings.ToLower(scriptFile), ".lua") {
+		scriptFile = scriptName + ".lua"
+	}
+
+	// Construct full path to the script
+	scriptPath := filepath.Join(sm.scriptsDir, scriptFile)
+
+	// Check if script exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("script not found: %s", scriptName)
+	}
+
+	// Get reaper-kb.ini path
+	kbIniPath, err := GetReaperKBIniPath()
+	if err != nil {
+		return "", err
+	}
+
+	// Read existing reaper-kb.ini file
+	file, err := os.Open(kbIniPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open reaper-kb.ini: %w", err)
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	scriptAlreadyRegistered := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		lines = append(lines, line)
+
+		// Check if script is already registered
+		if strings.Contains(line, scriptPath) {
+			scriptAlreadyRegistered = true
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("failed to read reaper-kb.ini: %w", err)
+	}
+
+	// If already registered, return early
+	if scriptAlreadyRegistered {
+		return fmt.Sprintf("Script '%s' is already registered in REAPER", scriptName), nil
+	}
+
+	// Find the [Main] section and add the script
+	// REAPER format: SCR 4 0 "Script: scriptname" "path/to/script.lua"
+	scriptEntry := fmt.Sprintf(`SCR 4 0 "Script: %s" "%s"`, scriptName, scriptPath)
+
+	// Find where to insert (after [Main] section header)
+	inserted := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, "[Main]") {
+			// Insert after [Main] line
+			lines = append(lines[:i+1], append([]string{scriptEntry}, lines[i+1:]...)...)
+			inserted = true
+			break
+		}
+	}
+
+	// If [Main] section not found, append to end
+	if !inserted {
+		lines = append(lines, "", "[Main]", scriptEntry)
+	}
+
+	// Write back to file
+	content := strings.Join(lines, "\n")
+	if err := os.WriteFile(kbIniPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write reaper-kb.ini: %w", err)
+	}
+
+	return fmt.Sprintf("Successfully registered script '%s' in REAPER keyboard shortcuts", scriptName), nil
+}
+
+// RegisterAllScripts registers all scripts in the scripts directory to reaper-kb.ini
+func (sm *ScriptManager) RegisterAllScripts() (string, error) {
+	scripts, err := ListLuaScripts(sm.scriptsDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to list scripts: %w", err)
+	}
+
+	if len(scripts) == 0 {
+		return "No scripts found to register", nil
+	}
+
+	registered := 0
+	alreadyRegistered := 0
+	failed := 0
+
+	for _, script := range scripts {
+		result, err := sm.RegisterScript(script)
+		if err != nil {
+			failed++
+			continue
+		}
+
+		if strings.Contains(result, "already registered") {
+			alreadyRegistered++
+		} else {
+			registered++
+		}
+	}
+
+	summary := fmt.Sprintf("Registration complete: %d newly registered, %d already registered", registered, alreadyRegistered)
+	if failed > 0 {
+		summary += fmt.Sprintf(", %d failed", failed)
+	}
+
+	return summary, nil
+}
