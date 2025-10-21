@@ -381,3 +381,64 @@ func (sm *ScriptManager) RegisterAllScripts() (string, error) {
 
 	return summary, nil
 }
+
+// CleanScripts removes script entries from reaper-kb.ini where the script files no longer exist
+func (sm *ScriptManager) CleanScripts() (string, error) {
+	// Get reaper-kb.ini path
+	kbIniPath, err := GetReaperKBIniPath()
+	if err != nil {
+		return "", err
+	}
+
+	// Read existing reaper-kb.ini file
+	file, err := os.Open(kbIniPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open reaper-kb.ini: %w", err)
+	}
+	defer file.Close()
+
+	var lines []string
+	var removedCount int
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if this is a script entry line
+		if strings.HasPrefix(strings.TrimSpace(line), "SCR ") {
+			// Extract the script path from the line
+			// Format: SCR 4 0 "Script: name" "path/to/script.lua"
+			parts := strings.Split(line, "\"")
+			if len(parts) >= 4 {
+				scriptPath := parts[3] // The path is in the 4th quoted section
+
+				// Check if the script file exists
+				if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+					// Script file doesn't exist, skip this line (don't add to lines)
+					removedCount++
+					continue
+				}
+			}
+		}
+
+		// Keep this line
+		lines = append(lines, line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("failed to read reaper-kb.ini: %w", err)
+	}
+
+	// If no changes, return early
+	if removedCount == 0 {
+		return "No missing scripts found in reaper-kb.ini. All script paths are valid.", nil
+	}
+
+	// Write back to file
+	content := strings.Join(lines, "\n")
+	if err := os.WriteFile(kbIniPath, []byte(content), 0644); err != nil {
+		return "", fmt.Errorf("failed to write reaper-kb.ini: %w", err)
+	}
+
+	return fmt.Sprintf("Cleaned %d missing script(s) from reaper-kb.ini", removedCount), nil
+}

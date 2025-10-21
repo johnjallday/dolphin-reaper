@@ -50,7 +50,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "get_settings"},
+					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_settings"},
 				},
 				"script": map[string]any{
 					"type":        "string",
@@ -118,10 +118,12 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		return scriptManager.RegisterScript(p.Script)
 	case "register_all_scripts":
 		return scriptManager.RegisterAllScripts()
+	case "clean_scripts":
+		return scriptManager.CleanScripts()
 	case "get_settings":
 		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_settings", p.Operation)
 	}
 }
 
