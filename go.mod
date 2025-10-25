@@ -1,4 +1,4 @@
-module github.com/johnjallday/dolphin-reaper-plugin
+module github.com/johnjallday/ori-reaper-plugin
 
 go 1.24.1
 
@@ -6,12 +6,12 @@ toolchain go1.24.8
 
 require (
 	github.com/hashicorp/go-plugin v1.7.0
-	github.com/johnjallday/dolphin-agent v0.0.0-20250814050009-07ed70c7c8b8
+	github.com/johnjallday/ori-agent v0.0.0-20250814050009-07ed70c7c8b8
 	github.com/openai/openai-go/v2 v2.0.2
 	github.com/shirou/gopsutil/v3 v3.24.5
 )
 
-replace github.com/johnjallday/dolphin-agent => ../dolphin-agent
+replace github.com/johnjallday/ori-agent => ../../ori-agent
 
 require (
 	github.com/fatih/color v1.13.0 // indirect

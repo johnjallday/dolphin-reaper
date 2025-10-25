@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build script for dolphin-reaper plugin
+# Build script for ori-reaper plugin
 
 set -e # Exit on any error
 
@@ -14,10 +14,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-PLUGIN_NAME="dolphin-reaper"
-OUTPUT_NAME="dolphin-reaper"
+PLUGIN_NAME="ori-reaper"
+OUTPUT_NAME="ori-reaper"
 
-echo -e "${BLUE}Building dolphin-reaper RPC plugin...${NC}"
+echo -e "${BLUE}Building ori-reaper RPC plugin...${NC}"
 
 # Update dependencies
 echo -e "${YELLOW}Updating dependencies...${NC}"
@@ -42,11 +42,11 @@ if go build \
   echo -e "${BLUE}Plugin binary: $OUTPUT_NAME${NC}"
   ls -la "$OUTPUT_NAME"
 
-  # Copy to dolphin-agent uploaded_plugins if it exists
-  AGENT_PLUGINS_DIR="../dolphin-agent/uploaded_plugins"
+  # Copy to ori-agent uploaded_plugins if it exists
+  AGENT_PLUGINS_DIR="../ori-agent/uploaded_plugins"
   if [ -d "$AGENT_PLUGINS_DIR" ]; then
     cp "$OUTPUT_NAME" "$AGENT_PLUGINS_DIR/"
-    echo -e "${GREEN}✓ Copied to dolphin-agent: $AGENT_PLUGINS_DIR/$OUTPUT_NAME${NC}"
+    echo -e "${GREEN}✓ Copied to ori-agent: $AGENT_PLUGINS_DIR/$OUTPUT_NAME${NC}"
   fi
 else
   echo -e "${RED}✗ Failed to build plugin${NC}"

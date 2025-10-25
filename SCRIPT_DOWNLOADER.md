@@ -1,6 +1,6 @@
 # Script Downloader Feature
 
-The dolphin-reaper plugin now includes a **Script Downloader** feature that allows you to browse and download ReaScripts directly from the GitHub repository.
+The ori-reaper plugin now includes a **Script Downloader** feature that allows you to browse and download ReaScripts directly from the GitHub repository.
 
 ## New Operations
 
@@ -67,10 +67,10 @@ Downloads and installs a specific script from the repository.
 
 ### GitHub API Integration
 
-- **Repository**: `johnjallday/dolphin-reaper`
+- **Repository**: `johnjallday/ori-reaper`
 - **Branch**: `dev`
 - **Directory**: `/reascripts`
-- **API Endpoint**: `https://api.github.com/repos/johnjallday/dolphin-reaper/contents/reascripts?ref=dev`
+- **API Endpoint**: `https://api.github.com/repos/johnjallday/ori-reaper/contents/reascripts?ref=dev`
 
 ### Supported Script Types
 
@@ -176,7 +176,7 @@ result := pluginapi.NewTableResult(
 )
 result.Description = fmt.Sprintf("Found %d scripts in the repository. Use 'download_script' to install.", len(scripts))
 result.Metadata["action"] = "download_script"
-result.Metadata["source"] = "https://github.com/johnjallday/dolphin-reaper/tree/dev/reascripts"
+result.Metadata["source"] = "https://github.com/johnjallday/ori-reaper/tree/dev/reascripts"
 ```
 
 This ensures the frontend displays the data as a nicely formatted table.
@@ -229,7 +229,7 @@ This ensures the frontend displays the data as a nicely formatted table.
 
 To test the new feature:
 
-1. **Restart dolphin-agent** to load the updated plugin
+1. **Restart ori-agent** to load the updated plugin
 2. Ask: **"Show me available scripts to download"**
 3. Verify the table displays correctly with Name, Filename, Description, Size
 4. Ask: **"Download the [filename] script"**
@@ -249,6 +249,6 @@ To test the new feature:
 ## Support
 
 For issues or feature requests related to the Script Downloader:
-1. Check the GitHub repository: https://github.com/johnjallday/dolphin-reaper
+1. Check the GitHub repository: https://github.com/johnjallday/ori-reaper
 2. Report issues in the repository's issue tracker
 3. Contribute scripts to the `/reascripts` directory in the `dev` branch

@@ -112,7 +112,7 @@ The plugin exposes a single function `reaper_manager` with two operations:
 
 ### 1. Build the Plugin
 ```bash
-cd dolphin-reaper
+cd ori-reaper
 go mod tidy
 go build -buildmode=plugin -o reascript_launcher.so main.go
 ```

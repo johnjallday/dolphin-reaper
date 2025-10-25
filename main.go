@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-plugin"
-	"github.com/johnjallday/dolphin-agent/pluginapi"
-	reapercontext "github.com/johnjallday/dolphin-reaper-plugin/pkg/context"
-	"github.com/johnjallday/dolphin-reaper-plugin/pkg/scripts"
-	"github.com/johnjallday/dolphin-reaper-plugin/pkg/settings"
+	"github.com/johnjallday/ori-agent/pluginapi"
+	reapercontext "github.com/johnjallday/ori-reaper-plugin/internal/context"
+	"github.com/johnjallday/ori-reaper-plugin/internal/scripts"
+	"github.com/johnjallday/ori-reaper-plugin/internal/settings"
 	"github.com/openai/openai-go/v2"
 )
 
@@ -25,6 +25,7 @@ type reaperTool struct {
 // Ensure compile-time conformance.
 var _ pluginapi.Tool = reaperTool{}
 var _ pluginapi.VersionedTool = reaperTool{}
+var _ pluginapi.InitializationProvider = (*reaperTool)(nil)
 
 // Version information set at build time via -ldflags
 var (
@@ -43,7 +44,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 	}
 
 	return openai.FunctionDefinitionParam{
-		Name:        "reaper_manager",
+		Name:        "ori_reaper",
 		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, download scripts from repository, or configure setup"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
@@ -51,7 +52,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context", "get_settings"},
+					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context"},
 				},
 				"script": map[string]any{
 					"type":        "string",
@@ -131,10 +132,8 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 			return "", fmt.Errorf("failed to marshal context: %w", err)
 		}
 		return string(contextJSON), nil
-	case "get_settings":
-		return globalSettingsManager.GetSettingsStruct()
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context, get_settings", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context", p.Operation)
 	}
 }
 
@@ -160,6 +159,43 @@ func (t reaperTool) GetDefaultSettings() (string, error) {
 // SetAgentContext provides the current agent information to the plugin
 func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 	t.agentContext = &ctx
+}
+
+// InitializationProvider implementation for frontend settings
+func (t *reaperTool) GetRequiredConfig() []pluginapi.ConfigVariable {
+	return []pluginapi.ConfigVariable{
+		{
+			Key:          "scripts_dir",
+			Name:         "Scripts Directory",
+			Description:  "Directory where REAPER scripts (.lua, .eel, .py) are stored",
+			Type:         pluginapi.ConfigTypeDirPath,
+			Required:     true,
+			DefaultValue: "/Users/YOUR_USERNAME/Library/Application Support/REAPER/Scripts",
+			Placeholder:  "/path/to/REAPER/Scripts",
+		},
+	}
+}
+
+func (t *reaperTool) ValidateConfig(config map[string]interface{}) error {
+	scriptsDir, ok := config["scripts_dir"].(string)
+	if !ok || scriptsDir == "" {
+		return fmt.Errorf("scripts_dir is required")
+	}
+	return nil
+}
+
+func (t *reaperTool) InitializeWithConfig(config map[string]interface{}) error {
+	if t.agentContext == nil {
+		return fmt.Errorf("agent context not set")
+	}
+
+	// Save settings to agent directory
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return globalSettingsManager.SetSettings(string(data))
 }
 
 func main() {
