@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/user"
+	"path/filepath"
 
 	"github.com/hashicorp/go-plugin"
 	"github.com/johnjallday/ori-agent/pluginapi"
@@ -63,16 +65,16 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 					"type":        "string",
 					"description": "Full filename of the script to download (including extension). Required for 'download_script' operation.",
 				},
-			"content": map[string]any{
-				"type":        "string",
-				"description": "Script content. Required for 'add' operation.",
+				"content": map[string]any{
+					"type":        "string",
+					"description": "Script content. Required for 'add' operation.",
+				},
+				"script_type": map[string]any{
+					"type":        "string",
+					"description": "Script type/extension. Required for 'add' operation. Valid values: lua, eel, py",
+					"enum":        []string{"lua", "eel", "py"},
+				},
 			},
-			"script_type": map[string]any{
-				"type":        "string",
-				"description": "Script type/extension. Required for 'add' operation. Valid values: lua, eel, py",
-				"enum":        []string{"lua", "eel", "py"},
-			},
-		},
 			"required": []string{"operation"},
 		},
 	}
@@ -154,6 +156,8 @@ func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 
 // InitializationProvider implementation for frontend settings
 func (t *reaperTool) GetRequiredConfig() []pluginapi.ConfigVariable {
+	usr, _ := user.Current()
+	defaultReascriptDir := filepath.Join(usr.HomeDir, "Library", "Application Support", "REAPER", "Scripts")
 	return []pluginapi.ConfigVariable{
 		{
 			Key:          "scripts_dir",
@@ -161,8 +165,8 @@ func (t *reaperTool) GetRequiredConfig() []pluginapi.ConfigVariable {
 			Description:  "Directory where REAPER scripts (.lua, .eel, .py) are stored",
 			Type:         pluginapi.ConfigTypeDirPath,
 			Required:     true,
-			DefaultValue: "/Users/YOUR_USERNAME/Library/Application Support/REAPER/Scripts",
-			Placeholder:  "/path/to/REAPER/Scripts",
+			DefaultValue: defaultReascriptDir,
+			Placeholder:  defaultReascriptDir,
 		},
 	}
 }
@@ -200,4 +204,3 @@ func main() {
 		GRPCServer: plugin.DefaultGRPCServer,
 	})
 }
-
