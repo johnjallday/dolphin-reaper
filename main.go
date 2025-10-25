@@ -142,15 +142,6 @@ func (t reaperTool) Version() string {
 	return Version
 }
 
-// Settings interface implementation
-func (t reaperTool) GetSettings() (string, error) {
-	return globalSettingsManager.GetSettings()
-}
-
-func (t reaperTool) SetSettings(settingsJSON string) error {
-	return globalSettingsManager.SetSettings(settingsJSON)
-}
-
 // GetDefaultSettings returns the default settings as JSON
 func (t reaperTool) GetDefaultSettings() (string, error) {
 	return globalSettingsManager.GetDefaultSettingsJSON()

@@ -12,32 +12,12 @@ import (
 
 // Manager manages plugin settings
 type Manager struct {
-	settings    *types.Settings
-	getSettings func() (*types.Settings, error)
+	settings *types.Settings
 }
 
 // NewManager creates a new settings manager
 func NewManager() *Manager {
 	return &Manager{}
-}
-
-// GetSettings returns the current settings as JSON
-func (sm *Manager) GetSettings() (string, error) {
-	if sm.getSettings == nil {
-		sm.getSettings = sm.loadSettingsFromAPI
-	}
-
-	settings, err := sm.getSettings()
-	if err != nil {
-		return "", fmt.Errorf("failed to load settings: %w", err)
-	}
-	sm.settings = settings
-
-	data, err := json.MarshalIndent(sm.settings, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal settings: %w", err)
-	}
-	return string(data), nil
 }
 
 // SetSettings updates settings from JSON
