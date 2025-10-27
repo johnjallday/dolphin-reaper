@@ -1,10 +1,10 @@
-# 🎵 Dolphin REAPER Plugin
+# 🎵 Ori Reaper Plugin
 
-A powerful REAPER integration plugin for Dolphin Agent that allows AI assistants to manage and launch ReaScripts directly from chat conversations.
+A powerful REAPER integration plugin for Ori Agent that allows AI assistants to manage and launch ReaScripts directly from chat conversations.
 
 ![REAPER](https://img.shields.io/badge/REAPER-Compatible-ff6b35)
 ![Go](https://img.shields.io/badge/Go-1.24-00add8)
-![Plugin](https://img.shields.io/badge/Plugin-Dolphin%20Agent-6366f1)
+![Plugin](https://img.shields.io/badge/Plugin-Ori%20Agent-6366f1)
 
 ## ✨ Features
 
@@ -117,8 +117,8 @@ go mod tidy
 go build -buildmode=plugin -o reascript_launcher.so main.go
 ```
 
-### 2. Upload to Dolphin Agent
-- Start your Dolphin Agent server
+### 2. Upload to Ori Agent
+- Start your Ori Agent server
 - Open the web interface (http://localhost:8080)
 - Go to **Plugins** tab in the sidebar
 - Upload `reascript_launcher.so` using the file input
@@ -234,7 +234,7 @@ case "new_operation":
 # Test plugin compilation
 go build -buildmode=plugin -o test.so main.go
 
-# Test with Dolphin Agent
+# Test with Ori Agent
 curl -X POST -F "plugin=@test.so" http://localhost:8080/api/plugins
 ```
 
@@ -261,7 +261,7 @@ This project is licensed under the MIT License - see the main project LICENSE fi
 
 - [REAPER](https://www.reaper.fm/) - Digital Audio Workstation
 - [gopsutil](https://github.com/shirou/gopsutil) - Cross-platform process monitoring
-- Dolphin Agent team for the plugin architecture
+- Ori Agent team for the plugin architecture
 
 ---
 
