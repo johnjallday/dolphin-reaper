@@ -2,7 +2,8 @@ package types
 
 // Settings represents the REAPER plugin configuration
 type Settings struct {
-	ScriptsDir string `json:"scripts_dir"`
+	ScriptsDir     string `json:"scripts_dir"`
+	WebRemotePort  int    `json:"web_remote_port"`
 }
 
 // AgentsConfig represents the agents.json file structure

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/johnjallday/ori-reaper-plugin/internal/platform"
+	"github.com/johnjallday/ori-reaper-plugin/internal/scripts"
 	"github.com/johnjallday/ori-reaper-plugin/internal/types"
 )
 
@@ -33,7 +34,8 @@ func (sm *Manager) SetSettings(settingsJSON string) error {
 // GetDefaultSettings creates default settings
 func (sm *Manager) GetDefaultSettings() *types.Settings {
 	return &types.Settings{
-		ScriptsDir: platform.DefaultScriptsDir(),
+		ScriptsDir:    platform.DefaultScriptsDir(),
+		WebRemotePort: 8080, // Default REAPER web remote port
 	}
 }
 
@@ -55,6 +57,38 @@ func (sm *Manager) GetCurrentScriptsDir() string {
 	}
 	settings := sm.GetCurrentSettings()
 	return settings.ScriptsDir
+}
+
+// GetWebRemotePort returns the configured web remote port from settings
+// Falls back to auto-detection from reaper.ini if not configured
+func (sm *Manager) GetWebRemotePort() int {
+	// Try to load settings from file if not already loaded
+	if sm.settings == nil {
+		if loadedSettings, err := sm.loadSettingsFromAPI(); err == nil {
+			sm.settings = loadedSettings
+		}
+	}
+	settings := sm.GetCurrentSettings()
+
+	// If port is configured in settings, use it
+	if settings.WebRemotePort != 0 {
+		return settings.WebRemotePort
+	}
+
+	// Port not configured - try to auto-detect from reaper.ini
+	// This handles the case where Web Remote was already configured in REAPER
+	// and user didn't need to configure it in the plugin
+	return sm.getAutoDetectedPort()
+}
+
+// getAutoDetectedPort attempts to detect the port from reaper.ini
+func (sm *Manager) getAutoDetectedPort() int {
+	// Try to auto-detect from reaper.ini
+	if config, err := scripts.GetWebRemoteConfig(); err == nil {
+		return config.Port
+	}
+	// Fallback to default if detection fails
+	return 2307
 }
 
 // GetDefaultSettingsJSON returns the default settings as JSON string

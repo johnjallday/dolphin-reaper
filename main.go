@@ -27,6 +27,7 @@ type reaperTool struct {
 // Ensure compile-time conformance.
 var _ pluginapi.Tool = reaperTool{}
 var _ pluginapi.VersionedTool = reaperTool{}
+var _ pluginapi.PluginMetadata = reaperTool{}
 var _ pluginapi.InitializationProvider = (*reaperTool)(nil)
 
 // Version information set at build time via -ldflags
@@ -47,14 +48,14 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "ori_reaper",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, download scripts from repository, or configure setup"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, download scripts from repository, configure Web Remote, or manage control surfaces"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
 					"description": "Operation to perform",
-					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context"},
+					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context", "get_web_remote_port", "get_tracks"},
 				},
 				"script": map[string]any{
 					"type":        "string",
@@ -134,14 +135,53 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 			return "", fmt.Errorf("failed to marshal context: %w", err)
 		}
 		return string(contextJSON), nil
+	case "get_web_remote_port":
+		// Get port from configuration
+		configuredPort := globalSettingsManager.GetWebRemotePort()
+		result := fmt.Sprintf("REAPER Web Remote:\n"+
+			"  Configured Port: %d\n"+
+			"  URL: http://localhost:%d\n"+
+			"  Note: This port is set in plugin configuration. Ensure REAPER's Web Remote matches this port.\n",
+			configuredPort, configuredPort)
+		return result, nil
+	case "get_tracks":
+		// Get port from configuration
+		configuredPort := globalSettingsManager.GetWebRemotePort()
+
+		// Create Web Remote client with configured port
+		client, err := scripts.NewWebRemoteClient(configuredPort)
+		if err != nil {
+			return "", fmt.Errorf("failed to create web remote client: %w", err)
+		}
+
+		tracks, err := client.GetTracks()
+		if err != nil {
+			return "", fmt.Errorf("failed to get tracks from REAPER: %w", err)
+		}
+		return scripts.FormatTracksTable(tracks), nil
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context, get_web_remote_port, get_tracks", p.Operation)
 	}
 }
 
 // Version returns the plugin version
 func (t reaperTool) Version() string {
 	return Version
+}
+
+// MinAgentVersion returns the minimum ori-agent version required
+func (t reaperTool) MinAgentVersion() string {
+	return "0.0.6" // Minimum version that supports plugin metadata
+}
+
+// MaxAgentVersion returns the maximum compatible ori-agent version
+func (t reaperTool) MaxAgentVersion() string {
+	return "" // No maximum limit
+}
+
+// APIVersion returns the plugin API version
+func (t reaperTool) APIVersion() string {
+	return "v1"
 }
 
 // GetDefaultSettings returns the default settings as JSON
@@ -158,7 +198,8 @@ func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
 func (t *reaperTool) GetRequiredConfig() []pluginapi.ConfigVariable {
 	usr, _ := user.Current()
 	defaultReascriptDir := filepath.Join(usr.HomeDir, "Library", "Application Support", "REAPER", "Scripts")
-	return []pluginapi.ConfigVariable{
+
+	configVars := []pluginapi.ConfigVariable{
 		{
 			Key:          "scripts_dir",
 			Name:         "Scripts Directory",
@@ -169,6 +210,26 @@ func (t *reaperTool) GetRequiredConfig() []pluginapi.ConfigVariable {
 			Placeholder:  defaultReascriptDir,
 		},
 	}
+
+	// Try to detect existing web remote port from reaper.ini
+	if _, err := scripts.GetWebRemoteConfig(); err == nil {
+		// Found existing web remote configuration - no need to require it
+		// The plugin will automatically use the detected port
+		// Port is not added to required config
+	} else {
+		// No existing web remote found - require user to configure it
+		configVars = append(configVars, pluginapi.ConfigVariable{
+			Key:          "web_remote_port",
+			Name:         "Web Remote Port",
+			Description:  "No Web Remote found in REAPER configuration. Please specify the port you want to use. Configure Web Remote in REAPER (Preferences → Control/OSC/web) to match this port.",
+			Type:         pluginapi.ConfigTypeInt,
+			Required:     true,
+			DefaultValue: "2307",
+			Placeholder:  "2307",
+		})
+	}
+
+	return configVars
 }
 
 func (t *reaperTool) ValidateConfig(config map[string]interface{}) error {
@@ -176,6 +237,25 @@ func (t *reaperTool) ValidateConfig(config map[string]interface{}) error {
 	if !ok || scriptsDir == "" {
 		return fmt.Errorf("scripts_dir is required")
 	}
+
+	// Validate web_remote_port if provided (it's optional if auto-detected)
+	if portValue, ok := config["web_remote_port"]; ok {
+		// Handle both float64 (from JSON unmarshal) and int
+		var port int
+		switch v := portValue.(type) {
+		case float64:
+			port = int(v)
+		case int:
+			port = v
+		default:
+			return fmt.Errorf("web_remote_port must be a number")
+		}
+
+		if port < 1024 || port > 65535 {
+			return fmt.Errorf("web_remote_port must be between 1024 and 65535")
+		}
+	}
+
 	return nil
 }
 
