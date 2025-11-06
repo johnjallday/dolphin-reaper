@@ -1,0 +1,227 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ori-agent
+        uses: actions/checkout@v4
+        with:
+          repository: johnjallday/ori-agent
+          path: ori-agent
+
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          path: plugins/ori-reaper
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: plugins/ori-reaper/go.sum
+
+      - name: Run go fmt
+        working-directory: plugins/ori-reaper
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go code is not formatted:"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Run go vet
+        working-directory: plugins/ori-reaper
+        run: go vet ./...
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+      - name: Run golangci-lint
+        working-directory: plugins/ori-reaper
+        run: golangci-lint run ./...
+        continue-on-error: true
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout ori-agent
+        uses: actions/checkout@v4
+        with:
+          repository: johnjallday/ori-agent
+          path: ori-agent
+
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          path: plugins/ori-reaper
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: plugins/ori-reaper/go.sum
+
+      - name: Download dependencies
+        working-directory: plugins/ori-reaper
+        run: go mod download
+
+      - name: Run tests
+        working-directory: plugins/ori-reaper
+        run: go test -v -short ./...
+
+  plugin-test:
+    name: Plugin Test
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout ori-agent
+        uses: actions/checkout@v4
+        with:
+          repository: johnjallday/ori-agent
+          path: ori-agent
+
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          path: plugins/ori-reaper
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: plugins/ori-reaper/go.sum
+
+      - name: Download dependencies
+        working-directory: plugins/ori-reaper
+        run: go mod download
+
+      - name: Build plugin binary
+        working-directory: plugins/ori-reaper
+        run: |
+          go build -o ori-reaper .
+          chmod +x ori-reaper
+
+      - name: Verify plugin binary
+        working-directory: plugins/ori-reaper
+        run: |
+          if [ ! -f "ori-reaper" ]; then
+            echo "Plugin binary not found!"
+            exit 1
+          fi
+          echo "Plugin binary built successfully"
+          ls -lh ori-reaper
+
+      - name: Check plugin metadata
+        working-directory: plugins/ori-reaper
+        run: |
+          echo "Checking for plugin metadata..."
+          if grep -r "VersionedTool\|MetadataProvider\|PluginCompatibility" . --include="*.go"; then
+            echo "Found plugin interface implementations"
+          else
+            echo "Warning: No versioning or metadata interfaces found"
+          fi
+
+      - name: Upload plugin binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ori-reaper-binary
+          path: plugins/ori-reaper/ori-reaper
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, plugin-test]
+
+    steps:
+      - name: Checkout ori-agent
+        uses: actions/checkout@v4
+        with:
+          repository: johnjallday/ori-agent
+          path: ori-agent
+
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          path: plugins/ori-reaper
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: plugins/ori-reaper/go.sum
+
+      - name: Download dependencies
+        working-directory: plugins/ori-reaper
+        run: go mod download
+
+      - name: Build binaries
+        working-directory: plugins/ori-reaper
+        run: |
+          mkdir -p bin
+
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -o bin/ori-reaper-linux-amd64 .
+
+          # macOS AMD64
+          GOOS=darwin GOARCH=amd64 go build -o bin/ori-reaper-darwin-amd64 .
+
+          # macOS ARM64
+          GOOS=darwin GOARCH=arm64 go build -o bin/ori-reaper-darwin-arm64 .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ori-reaper-binaries
+          path: plugins/ori-reaper/bin/
+          retention-days: 7
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout ori-agent
+        uses: actions/checkout@v4
+        with:
+          repository: johnjallday/ori-agent
+          path: ori-agent
+
+      - name: Checkout plugin code
+        uses: actions/checkout@v4
+        with:
+          path: plugins/ori-reaper
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out results.sarif plugins/ori-reaper/...'
+        continue-on-error: true
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+        continue-on-error: true

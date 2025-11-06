@@ -11,6 +11,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 )
 
+// Keep replace for now until ori-agent is published with correct module name
 replace github.com/johnjallday/ori-agent => ../../ori-agent
 
 require (

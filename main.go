@@ -12,6 +12,7 @@ import (
 	reapercontext "github.com/johnjallday/ori-reaper-plugin/internal/context"
 	"github.com/johnjallday/ori-reaper-plugin/internal/scripts"
 	"github.com/johnjallday/ori-reaper-plugin/internal/settings"
+	"github.com/johnjallday/ori-reaper-plugin/internal/webpage"
 	"github.com/openai/openai-go/v2"
 )
 
@@ -22,13 +23,16 @@ var globalSettingsManager = settings.NewManager()
 type reaperTool struct {
 	agentContext    *pluginapi.AgentContext
 	settingsManager *settings.Manager
+	webpageProvider *webpage.Provider
 }
 
 // Ensure compile-time conformance.
 var _ pluginapi.Tool = reaperTool{}
 var _ pluginapi.VersionedTool = reaperTool{}
-var _ pluginapi.PluginMetadata = reaperTool{}
+var _ pluginapi.PluginCompatibility = reaperTool{}
+var _ pluginapi.MetadataProvider = reaperTool{}
 var _ pluginapi.InitializationProvider = (*reaperTool)(nil)
+var _ pluginapi.WebPageProvider = (*reaperTool)(nil)
 
 // Version information set at build time via -ldflags
 var (
@@ -48,13 +52,13 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 
 	return openai.FunctionDefinitionParam{
 		Name:        "ori_reaper",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, download scripts from repository, configure Web Remote, or manage control surfaces"),
+		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, browse marketplace, configure Web Remote, or manage control surfaces"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
 			"properties": map[string]any{
 				"operation": map[string]any{
 					"type":        "string",
-					"description": "Operation to perform",
+					"description": "Operation to perform. Use 'download_script' to get the marketplace URL for browsing and downloading scripts visually.",
 					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context", "get_web_remote_port", "get_tracks"},
 				},
 				"script": map[string]any{
@@ -64,7 +68,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 				},
 				"filename": map[string]any{
 					"type":        "string",
-					"description": "Full filename of the script to download (including extension). Required for 'download_script' operation.",
+					"description": "Full filename of the script (including extension). Not used by 'download_script' - that operation now redirects to the marketplace.",
 				},
 				"content": map[string]any{
 					"type":        "string",
@@ -111,11 +115,8 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		downloader := scripts.NewScriptDownloader()
 		return downloader.ListAvailableScripts()
 	case "download_script":
-		if p.Filename == "" {
-			return "", fmt.Errorf("filename is required for 'download_script' operation")
-		}
-		downloader := scripts.NewScriptDownloader()
-		return downloader.DownloadScript(p.Filename, scriptsDir)
+		// Redirect to marketplace for visual browsing and downloading
+		return "🎵 Browse and download scripts at the marketplace:\nhttp://localhost:8080/api/plugins/ori-reaper/pages/marketplace", nil
 	case "register_script":
 		if p.Script == "" {
 			return "", fmt.Errorf("script name is required for 'register_script' operation")
@@ -182,6 +183,24 @@ func (t reaperTool) MaxAgentVersion() string {
 // APIVersion returns the plugin API version
 func (t reaperTool) APIVersion() string {
 	return "v1"
+}
+
+// GetMetadata returns plugin metadata (maintainers, license, repository)
+func (t reaperTool) GetMetadata() (*pluginapi.PluginMetadata, error) {
+	return &pluginapi.PluginMetadata{
+		Maintainers: []*pluginapi.Maintainer{
+			{
+				Name:         "John J",
+				Email:        "john@example.com",
+				Organization: "Ori Project",
+				Website:      "https://github.com/johnjallday",
+				Role:         "author",
+				Primary:      true,
+			},
+		},
+		License:    "MIT",
+		Repository: "https://github.com/johnjallday/ori-plugin-registry",
+	}, nil
 }
 
 // GetDefaultSettings returns the default settings as JSON
@@ -273,12 +292,23 @@ func (t *reaperTool) InitializeWithConfig(config map[string]interface{}) error {
 	return globalSettingsManager.SetSettings(string(data))
 }
 
+// GetWebPages returns list of available web pages
+func (t *reaperTool) GetWebPages() []string {
+	return t.webpageProvider.GetPages()
+}
+
+// ServeWebPage serves a custom web page
+func (t *reaperTool) ServeWebPage(path string, query map[string]string) (string, string, error) {
+	return t.webpageProvider.ServePage(path, query)
+}
+
 func main() {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: pluginapi.Handshake,
 		Plugins: map[string]plugin.Plugin{
 			"tool": &pluginapi.ToolRPCPlugin{Impl: &reaperTool{
 				settingsManager: globalSettingsManager,
+				webpageProvider: webpage.NewProvider(globalSettingsManager),
 			}},
 		},
 		GRPCServer: plugin.DefaultGRPCServer,

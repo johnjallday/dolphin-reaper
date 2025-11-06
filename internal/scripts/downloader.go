@@ -112,7 +112,7 @@ func (sd *ScriptDownloader) ListAvailableScripts() (string, error) {
 	// Create structured modal result for interactive selection
 	result := pluginapi.NewModalResult(
 		"Available ReaScripts for Download",
-		fmt.Sprintf("Found %d scripts in the repository. Click on a script to select it, then click Download.", len(scripts)),
+		fmt.Sprintf("Found %d scripts in the repository. Click on a script to select it, then click Download.\n\n🎵 Or browse the marketplace: http://localhost:8080/api/plugins/ori-reaper/pages/marketplace", len(scripts)),
 		modalItems,
 	)
 
@@ -260,5 +260,12 @@ func (sd *ScriptDownloader) DownloadScript(filename, targetDir string) (string, 
 	scriptName = strings.TrimSuffix(scriptName, ".eel")
 	scriptName = strings.TrimSuffix(scriptName, ".py")
 
-	return sm.AddScript(scriptName, string(content), scriptType)
+	result, err := sm.AddScript(scriptName, string(content), scriptType)
+	if err != nil {
+		return "", err
+	}
+
+	// Append marketplace URL to the result
+	result += "\n\n🎵 Browse more scripts at the marketplace: http://localhost:8080/api/plugins/ori-reaper/pages/marketplace"
+	return result, nil
 }

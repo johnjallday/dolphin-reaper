@@ -47,14 +47,14 @@ func GetREAPERContext() (*REAPERContext, error) {
 func getProjectInfo() (string, string, error) {
 	// Create a temporary Lua script that writes project info to a temp file
 	tmpDir := os.TempDir()
-	scriptPath := filepath.Join(tmpDir, "dolphin_get_context.lua")
-	outputPath := filepath.Join(tmpDir, "dolphin_context_output.txt")
+	scriptPath := filepath.Join(tmpDir, "ori_get_context.lua")
+	outputPath := filepath.Join(tmpDir, "ori_context_output.txt")
 
 	// Lua script that gets project info and writes to file
 	// Using proper escaping for the path
 	escapedOutputPath := strings.ReplaceAll(outputPath, "\\", "\\\\")
 
-	luaScript := fmt.Sprintf(`-- Dolphin Context Reader
+	luaScript := fmt.Sprintf(`-- Ori Context Reader
 -- Get current project info and write to temp file
 
 -- Use EnumProjects to get the current project path and name
