@@ -4,8 +4,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/johnjallday/ori-agent/pluginapi"
 	"github.com/johnjallday/ori-agent/internal/pluginloader"
+	"github.com/johnjallday/ori-agent/pluginapi"
 )
 
 func main() {
@@ -15,11 +15,11 @@ func main() {
 		fmt.Printf("Error loading plugin: %v\n", err)
 		return
 	}
-	
+
 	// Check if it implements InitializationProvider
 	if initProvider, ok := tool.(pluginapi.InitializationProvider); ok {
 		fmt.Println("✓ Plugin implements InitializationProvider")
-		
+
 		// Get required config
 		configVars := initProvider.GetRequiredConfig()
 		fmt.Printf("✓ Required config fields: %d\n", len(configVars))

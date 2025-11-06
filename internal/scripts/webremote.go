@@ -12,15 +12,15 @@ import (
 
 // Track represents a REAPER track with its properties
 type Track struct {
-	Index      int     `json:"index"`       // Track index (1-based)
-	Name       string  `json:"name"`        // Track name
-	Volume     float64 `json:"volume,omitempty"`      // Volume (dB)
-	Pan        float64 `json:"pan,omitempty"`         // Pan (-1.0 to 1.0)
-	Mute       bool    `json:"mute,omitempty"`        // Mute state
-	Solo       bool    `json:"solo,omitempty"`        // Solo state
-	RecArm     bool    `json:"rec_arm,omitempty"`     // Record arm state
-	Selected   bool    `json:"selected,omitempty"`    // Selection state
-	FXEnabled  bool    `json:"fx_enabled,omitempty"`  // FX enabled state
+	Index     int     `json:"index"`                // Track index (1-based)
+	Name      string  `json:"name"`                 // Track name
+	Volume    float64 `json:"volume,omitempty"`     // Volume (dB)
+	Pan       float64 `json:"pan,omitempty"`        // Pan (-1.0 to 1.0)
+	Mute      bool    `json:"mute,omitempty"`       // Mute state
+	Solo      bool    `json:"solo,omitempty"`       // Solo state
+	RecArm    bool    `json:"rec_arm,omitempty"`    // Record arm state
+	Selected  bool    `json:"selected,omitempty"`   // Selection state
+	FXEnabled bool    `json:"fx_enabled,omitempty"` // FX enabled state
 }
 
 // WebRemoteClient handles communication with REAPER's Web Remote interface

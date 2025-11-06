@@ -77,7 +77,7 @@ func GetWebRemotePort() (int, error) {
 
 // GetWebRemoteConfig reads reaper.ini and extracts the full web remote configuration
 // REAPER's web remote is configured as a control surface entry like:
-// csurf_0=HTTP 0 2307 '' 'index.html' 0 ''
+// csurf_0=HTTP 0 2307 ” 'index.html' 0 ”
 // or older format:
 // csurf_0=WEBR 0 0 0 0 0 0 - - - - - 8080
 func GetWebRemoteConfig() (*WebRemoteConfig, error) {
@@ -105,8 +105,8 @@ func GetWebRemoteConfig() (*WebRemoteConfig, error) {
 				continue
 			}
 
-			csurfKey := parts[0]    // e.g., "csurf_0"
-			csurfValue := parts[1]  // e.g., "HTTP 0 2307 '' 'index.html' 0 ''"
+			csurfKey := parts[0]   // e.g., "csurf_0"
+			csurfValue := parts[1] // e.g., "HTTP 0 2307 '' 'index.html' 0 ''"
 
 			// Check if this is a web remote entry (starts with "HTTP" or "WEBR")
 			if strings.HasPrefix(csurfValue, "HTTP ") || strings.HasPrefix(csurfValue, "WEBR ") {
