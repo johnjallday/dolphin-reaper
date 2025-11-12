@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os/user"
@@ -16,23 +17,29 @@ import (
 	"github.com/openai/openai-go/v2"
 )
 
+//go:embed plugin.yaml
+var configYAML string
+
 // Global settings manager
 var globalSettingsManager = settings.NewManager()
 
 // reaperTool implements pluginapi.Tool for launching ReaScripts (.lua) in REAPER.
 type reaperTool struct {
+	config          pluginapi.PluginConfig
 	agentContext    *pluginapi.AgentContext
 	settingsManager *settings.Manager
 	webpageProvider *webpage.Provider
 }
 
 // Ensure compile-time conformance.
-var _ pluginapi.Tool = reaperTool{}
-var _ pluginapi.VersionedTool = reaperTool{}
-var _ pluginapi.PluginCompatibility = reaperTool{}
-var _ pluginapi.MetadataProvider = reaperTool{}
-var _ pluginapi.InitializationProvider = (*reaperTool)(nil)
-var _ pluginapi.WebPageProvider = (*reaperTool)(nil)
+var (
+	_ pluginapi.Tool                   = reaperTool{}
+	_ pluginapi.VersionedTool          = reaperTool{}
+	_ pluginapi.PluginCompatibility    = reaperTool{}
+	_ pluginapi.MetadataProvider       = reaperTool{}
+	_ pluginapi.InitializationProvider = (*reaperTool)(nil)
+	_ pluginapi.WebPageProvider        = (*reaperTool)(nil)
+)
 
 // Version information set at build time via -ldflags
 var (
@@ -51,7 +58,7 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 	}
 
 	return openai.FunctionDefinitionParam{
-		Name:        "ori_reaper",
+		Name:        "ori-reaper",
 		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, browse marketplace, configure Web Remote, or manage control surfaces"),
 		Parameters: openai.FunctionParameters{
 			"type": "object",
@@ -167,12 +174,12 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 
 // Version returns the plugin version
 func (t reaperTool) Version() string {
-	return Version
+	return t.config.Version
 }
 
 // MinAgentVersion returns the minimum ori-agent version required
 func (t reaperTool) MinAgentVersion() string {
-	return "0.0.6" // Minimum version that supports plugin metadata
+	return t.config.Requirements.MinOriVersion
 }
 
 // MaxAgentVersion returns the maximum compatible ori-agent version
@@ -185,22 +192,9 @@ func (t reaperTool) APIVersion() string {
 	return "v1"
 }
 
-// GetMetadata returns plugin metadata (maintainers, license, repository)
+// GetMetadata returns plugin metadata from config
 func (t reaperTool) GetMetadata() (*pluginapi.PluginMetadata, error) {
-	return &pluginapi.PluginMetadata{
-		Maintainers: []*pluginapi.Maintainer{
-			{
-				Name:         "John J",
-				Email:        "john@example.com",
-				Organization: "Ori Project",
-				Website:      "https://github.com/johnjallday",
-				Role:         "author",
-				Primary:      true,
-			},
-		},
-		License:    "MIT",
-		Repository: "https://github.com/johnjallday/ori-plugin-registry",
-	}, nil
+	return t.config.ToMetadata()
 }
 
 // GetDefaultSettings returns the default settings as JSON
@@ -303,10 +297,14 @@ func (t *reaperTool) ServeWebPage(path string, query map[string]string) (string,
 }
 
 func main() {
+	// Parse plugin config from embedded YAML
+	config := pluginapi.ReadPluginConfig(configYAML)
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: pluginapi.Handshake,
 		Plugins: map[string]plugin.Plugin{
 			"tool": &pluginapi.ToolRPCPlugin{Impl: &reaperTool{
+				config:          config,
 				settingsManager: globalSettingsManager,
 				webpageProvider: webpage.NewProvider(globalSettingsManager),
 			}},

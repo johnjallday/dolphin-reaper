@@ -1,8 +1,6 @@
 module github.com/johnjallday/ori-reaper-plugin
 
-go 1.24.1
-
-toolchain go1.24.8
+go 1.25.3
 
 require (
 	github.com/hashicorp/go-plugin v1.7.0
@@ -15,6 +13,7 @@ require (
 replace github.com/johnjallday/ori-agent => ../../ori-agent
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
