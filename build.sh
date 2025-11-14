@@ -23,8 +23,18 @@ echo -e "${BLUE}Building ori-reaper RPC plugin...${NC}"
 echo -e "${YELLOW}Updating dependencies...${NC}"
 go mod tidy
 
-# Get version information
-VERSION=$(cat VERSION 2>/dev/null || echo "0.0.1")
+# Get version information from plugin.yaml
+if [ -f "plugin.yaml" ]; then
+    VERSION=$(grep '^version:' plugin.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+    if [ -z "$VERSION" ]; then
+        echo -e "${RED}Error: Could not extract version from plugin.yaml${NC}"
+        exit 1
+    fi
+else
+    echo -e "${RED}Error: plugin.yaml not found${NC}"
+    exit 1
+fi
+
 BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
@@ -54,4 +64,3 @@ else
 fi
 
 echo -e "${GREEN}🎉 Build completed successfully!${NC}"
-
