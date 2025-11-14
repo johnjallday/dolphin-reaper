@@ -1,5 +1,5 @@
 name: ori-reaper
-version: 0.2.3
+version: 0.0.7
 description: REAPER DAW integration - manage scripts, actions, and workflows for music production
 license: MIT
 repository: https://github.com/johnjallday/ori-reaper
@@ -13,5 +13,5 @@ platforms:
     architectures: [amd64, arm64]
 
 requirements:
-  min_ori_version: "0.1.0"
+  min_ori_version: "0.0.9"
   dependencies: []
