@@ -50,6 +50,7 @@ logs/
 dist/
 build/
 release/
+ori-reaper
 
 # Temporary files
 .tmp/
