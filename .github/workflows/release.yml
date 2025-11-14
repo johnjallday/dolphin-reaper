@@ -31,29 +31,89 @@ jobs:
         with:
           go-version: '1.24'
 
+      - name: Install Python dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Extract version and platforms from plugin.yaml
+        id: plugin_config
+        working-directory: plugins/ori-reaper
+        run: |
+          # Extract version
+          VERSION=$(grep '^version:' plugin.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+          # Extract platforms and architectures
+          # This will create a matrix of OS and architectures from plugin.yaml
+          python3 << 'EOF'
+          import yaml
+          import os
+
+          with open('plugin.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          platforms = config.get('platforms', [])
+          build_targets = []
+
+          for platform in platforms:
+              os_name = platform['os']
+              architectures = platform.get('architectures', ['amd64'])
+
+              for arch in architectures:
+                  # Normalize arch names (amd64 is also known as x86_64)
+                  build_targets.append(f"{os_name}-{arch}")
+
+          # Write to GitHub output
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"targets={','.join(build_targets)}\n")
+
+          print(f"Build targets: {build_targets}")
+          EOF
+
       - name: Run tests
         working-directory: plugins/ori-reaper
         run: go test -short ./...
 
-      - name: Build for multiple platforms
+      - name: Build for supported platforms
         working-directory: plugins/ori-reaper
+        env:
+          VERSION: ${{ steps.plugin_config.outputs.version }}
+          BUILD_TIME: ${{ github.event.repository.updated_at }}
+          GIT_COMMIT: ${{ github.sha }}
         run: |
           mkdir -p bin
 
-          # Linux AMD64
-          GOOS=linux GOARCH=amd64 go build -o bin/ori-reaper-linux-amd64 .
+          # Get build targets from previous step
+          TARGETS="${{ steps.plugin_config.outputs.targets }}"
 
-          # Linux ARM64
-          GOOS=linux GOARCH=arm64 go build -o bin/ori-reaper-linux-arm64 .
+          # Get git commit short hash
+          GIT_SHORT=$(echo "$GIT_COMMIT" | cut -c1-7)
+          BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S_UTC')
 
-          # macOS AMD64 (Intel)
-          GOOS=darwin GOARCH=amd64 go build -o bin/ori-reaper-darwin-amd64 .
+          echo "Building for targets: $TARGETS"
+          echo "Version: $VERSION"
+          echo "Git commit: $GIT_SHORT"
 
-          # macOS ARM64 (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -o bin/ori-reaper-darwin-arm64 .
+          # Build for each target
+          IFS=',' read -ra TARGET_ARRAY <<< "$TARGETS"
+          for target in "${TARGET_ARRAY[@]}"; do
+            IFS='-' read -ra PARTS <<< "$target"
+            OS="${PARTS[0]}"
+            ARCH="${PARTS[1]}"
 
-          # Windows AMD64
-          GOOS=windows GOARCH=amd64 go build -o bin/ori-reaper-windows-amd64.exe .
+            OUTPUT="bin/ori-reaper-${OS}-${ARCH}"
+            if [ "$OS" = "windows" ]; then
+              OUTPUT="${OUTPUT}.exe"
+            fi
+
+            echo "Building for $OS/$ARCH -> $OUTPUT"
+            GOOS=$OS GOARCH=$ARCH go build \
+              -ldflags "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_SHORT" \
+              -o "$OUTPUT" .
+          done
+
+          ls -lh bin/
 
       - name: Generate checksums
         working-directory: plugins/ori-reaper
@@ -62,20 +122,43 @@ jobs:
           shasum -a 256 * > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Prepare release assets
+        id: release_assets
+        working-directory: plugins/ori-reaper
+        run: |
+          # Generate list of all binaries for upload
+          ASSETS=$(find bin -type f -name 'ori-reaper-*' -o -name 'SHA256SUMS' | sed 's|^|plugins/ori-reaper/|' | tr '\n' '\n')
+          echo "assets<<EOF" >> $GITHUB_OUTPUT
+          echo "$ASSETS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Read checksums for release notes
+          echo "checksums<<EOF" >> $GITHUB_OUTPUT
+          cat bin/SHA256SUMS >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }} - v${{ steps.plugin_config.outputs.version }}
           draft: false
           prerelease: false
           generate_release_notes: true
           body: |
-            ## 🔐 Checksums (SHA256)
+            ## ori-reaper v${{ steps.plugin_config.outputs.version }}
+
+            REAPER DAW integration plugin - manage scripts, actions, and workflows for music production.
+
+            ### Supported Platforms
+            This release includes binaries for the following platforms as specified in `plugin.yaml`:
+            - **macOS**: Intel (amd64) and Apple Silicon (arm64)
+
+            ### 🔐 Checksums (SHA256)
 
             Verify your download integrity:
             ```
-            $(cat plugins/ori-reaper/bin/SHA256SUMS)
+            ${{ steps.release_assets.outputs.checksums }}
             ```
 
             **How to verify:**
@@ -87,12 +170,14 @@ jobs:
             shasum -a 256 ori-reaper-<your-platform>
             # Compare output with checksum above
             ```
+
+            ### Installation
+            1. Download the appropriate binary for your platform
+            2. Verify the checksum (recommended)
+            3. Make it executable: `chmod +x ori-reaper-<platform>`
+            4. Use with ori-agent
+
           files: |
-            plugins/ori-reaper/bin/ori-reaper-linux-amd64
-            plugins/ori-reaper/bin/ori-reaper-linux-arm64
-            plugins/ori-reaper/bin/ori-reaper-darwin-amd64
-            plugins/ori-reaper/bin/ori-reaper-darwin-arm64
-            plugins/ori-reaper/bin/ori-reaper-windows-amd64.exe
-            plugins/ori-reaper/bin/SHA256SUMS
+            plugins/ori-reaper/bin/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
