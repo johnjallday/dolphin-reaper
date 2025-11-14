@@ -56,3 +56,6 @@ ori-reaper
 .tmp/
 *.tmp
 *.temp
+
+CLAUDE.md
+AGENTS.md
