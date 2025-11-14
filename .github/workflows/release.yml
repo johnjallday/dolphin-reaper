@@ -70,6 +70,23 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ## 🔐 Checksums (SHA256)
+
+            Verify your download integrity:
+            ```
+            $(cat plugins/ori-reaper/bin/SHA256SUMS)
+            ```
+
+            **How to verify:**
+            ```bash
+            # macOS/Linux
+            shasum -a 256 -c SHA256SUMS --ignore-missing
+
+            # Or manually
+            shasum -a 256 ori-reaper-<your-platform>
+            # Compare output with checksum above
+            ```
           files: |
             plugins/ori-reaper/bin/ori-reaper-linux-amd64
             plugins/ori-reaper/bin/ori-reaper-linux-arm64

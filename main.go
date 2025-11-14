@@ -14,7 +14,6 @@ import (
 	"github.com/johnjallday/ori-reaper-plugin/internal/scripts"
 	"github.com/johnjallday/ori-reaper-plugin/internal/settings"
 	"github.com/johnjallday/ori-reaper-plugin/internal/webpage"
-	"github.com/openai/openai-go/v2"
 )
 
 //go:embed plugin.yaml
@@ -23,65 +22,48 @@ var configYAML string
 // Global settings manager
 var globalSettingsManager = settings.NewManager()
 
-// reaperTool implements pluginapi.Tool for launching ReaScripts (.lua) in REAPER.
+// reaperTool implements the PluginTool interface.
 type reaperTool struct {
-	config          pluginapi.PluginConfig
-	agentContext    *pluginapi.AgentContext
+	pluginapi.BasePlugin
 	settingsManager *settings.Manager
 	webpageProvider *webpage.Provider
 }
 
-// Ensure compile-time conformance.
-var (
-	_ pluginapi.Tool                   = reaperTool{}
-	_ pluginapi.VersionedTool          = reaperTool{}
-	_ pluginapi.PluginCompatibility    = reaperTool{}
-	_ pluginapi.MetadataProvider       = reaperTool{}
-	_ pluginapi.InitializationProvider = (*reaperTool)(nil)
-	_ pluginapi.WebPageProvider        = (*reaperTool)(nil)
-)
+// Ensure compile-time conformance
+var _ pluginapi.PluginTool = (*reaperTool)(nil)
+var _ pluginapi.VersionedTool = (*reaperTool)(nil)
+var _ pluginapi.PluginCompatibility = (*reaperTool)(nil)
+var _ pluginapi.MetadataProvider = (*reaperTool)(nil)
+var _ pluginapi.AgentAwareTool = (*reaperTool)(nil)
+var _ pluginapi.InitializationProvider = (*reaperTool)(nil)
+var _ pluginapi.WebPageProvider = (*reaperTool)(nil)
 
-// Version information set at build time via -ldflags
-var (
-	Version   = "dev"
-	BuildTime = "unknown"
-	GitCommit = "unknown"
-)
-
-// Definition returns the OpenAI function definition for REAPER script management
-func (t reaperTool) Definition() openai.FunctionDefinitionParam {
-	// Build enum of scripts from current settings directory
-	enum := []string(nil)
-	scriptsDir := globalSettingsManager.GetCurrentScriptsDir()
-	if scriptList, err := scripts.ListLuaScripts(scriptsDir); err == nil && len(scriptList) > 0 {
-		enum = append(enum, scriptList...)
-	}
-
-	return openai.FunctionDefinitionParam{
+// Definition returns the tool definition for ori-reaper
+func (t *reaperTool) Definition() pluginapi.Tool {
+	return pluginapi.Tool{
 		Name:        "ori-reaper",
-		Description: openai.String("Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, browse marketplace, configure Web Remote, or manage control surfaces"),
-		Parameters: openai.FunctionParameters{
+		Description: "Manage REAPER ReaScripts: list available scripts, launch them, add new scripts, delete them, browse marketplace, configure Web Remote, or manage control surfaces",
+		Parameters: map[string]interface{}{
 			"type": "object",
-			"properties": map[string]any{
-				"operation": map[string]any{
+			"properties": map[string]interface{}{
+				"operation": map[string]interface{}{
 					"type":        "string",
 					"description": "Operation to perform. Use 'download_script' to get the marketplace URL for browsing and downloading scripts visually.",
 					"enum":        []string{"list", "run", "add", "delete", "list_available_scripts", "download_script", "register_script", "register_all_scripts", "clean_scripts", "get_context", "get_web_remote_port", "get_tracks"},
 				},
-				"script": map[string]any{
+				"script": map[string]interface{}{
 					"type":        "string",
 					"description": "Base name of the ReaScript (without extension). Required for 'run', 'add', and 'delete' operations.",
-					"enum":        enum, // may be nil/empty if directory unreadable; that's fine
 				},
-				"filename": map[string]any{
+				"filename": map[string]interface{}{
 					"type":        "string",
 					"description": "Full filename of the script (including extension). Not used by 'download_script' - that operation now redirects to the marketplace.",
 				},
-				"content": map[string]any{
+				"content": map[string]interface{}{
 					"type":        "string",
 					"description": "Script content. Required for 'add' operation.",
 				},
-				"script_type": map[string]any{
+				"script_type": map[string]interface{}{
 					"type":        "string",
 					"description": "Script type/extension. Required for 'add' operation. Valid values: lua, eel, py",
 					"enum":        []string{"lua", "eel", "py"},
@@ -92,32 +74,33 @@ func (t reaperTool) Definition() openai.FunctionDefinitionParam {
 	}
 }
 
-// Call handles the function call and dispatches to appropriate handlers
-func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
-	var p struct {
+// Call implements the PluginTool interface
+func (t *reaperTool) Call(ctx context.Context, args string) (string, error) {
+	// Parse parameters
+	var params struct {
 		Operation  string `json:"operation"`
 		Script     string `json:"script"`
+		Filename   string `json:"filename"`
 		Content    string `json:"content"`
 		ScriptType string `json:"script_type"`
-		Filename   string `json:"filename"`
-	}
-	if err := json.Unmarshal([]byte(args), &p); err != nil {
-		return "", err
 	}
 
+	if err := json.Unmarshal([]byte(args), &params); err != nil {
+		return "", fmt.Errorf("failed to parse parameters: %w", err)
+	}
 	// Get current scripts directory and create a script manager
 	scriptsDir := globalSettingsManager.GetCurrentScriptsDir()
 	scriptManager := scripts.NewScriptManager(scriptsDir)
 
-	switch p.Operation {
+	switch params.Operation {
 	case "list":
 		return scriptManager.ListScripts()
 	case "run":
-		return scriptManager.RunScript(p.Script)
+		return scriptManager.RunScript(params.Script)
 	case "add":
-		return scriptManager.AddScript(p.Script, p.Content, p.ScriptType)
+		return scriptManager.AddScript(params.Script, params.Content, params.ScriptType)
 	case "delete":
-		return scriptManager.DeleteScript(p.Script)
+		return scriptManager.DeleteScript(params.Script)
 	case "list_available_scripts":
 		downloader := scripts.NewScriptDownloader()
 		return downloader.ListAvailableScripts()
@@ -125,10 +108,10 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		// Redirect to marketplace for visual browsing and downloading
 		return "🎵 Browse and download scripts at the marketplace:\nhttp://localhost:8080/api/plugins/ori-reaper/pages/marketplace", nil
 	case "register_script":
-		if p.Script == "" {
+		if params.Script == "" {
 			return "", fmt.Errorf("script name is required for 'register_script' operation")
 		}
-		return scriptManager.RegisterScript(p.Script)
+		return scriptManager.RegisterScript(params.Script)
 	case "register_all_scripts":
 		return scriptManager.RegisterAllScripts()
 	case "clean_scripts":
@@ -168,43 +151,13 @@ func (t reaperTool) Call(ctx context.Context, args string) (string, error) {
 		}
 		return scripts.FormatTracksTable(tracks), nil
 	default:
-		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context, get_web_remote_port, get_tracks", p.Operation)
+		return "", fmt.Errorf("unknown operation: %s. Valid operations: list, run, add, delete, list_available_scripts, download_script, register_script, register_all_scripts, clean_scripts, get_context, get_web_remote_port, get_tracks", params.Operation)
 	}
 }
 
-// Version returns the plugin version
-func (t reaperTool) Version() string {
-	return t.config.Version
-}
-
-// MinAgentVersion returns the minimum ori-agent version required
-func (t reaperTool) MinAgentVersion() string {
-	return t.config.Requirements.MinOriVersion
-}
-
-// MaxAgentVersion returns the maximum compatible ori-agent version
-func (t reaperTool) MaxAgentVersion() string {
-	return "" // No maximum limit
-}
-
-// APIVersion returns the plugin API version
-func (t reaperTool) APIVersion() string {
-	return "v1"
-}
-
-// GetMetadata returns plugin metadata from config
-func (t reaperTool) GetMetadata() (*pluginapi.PluginMetadata, error) {
-	return t.config.ToMetadata()
-}
-
 // GetDefaultSettings returns the default settings as JSON
-func (t reaperTool) GetDefaultSettings() (string, error) {
+func (t *reaperTool) GetDefaultSettings() (string, error) {
 	return globalSettingsManager.GetDefaultSettingsJSON()
-}
-
-// SetAgentContext provides the current agent information to the plugin
-func (t *reaperTool) SetAgentContext(ctx pluginapi.AgentContext) {
-	t.agentContext = &ctx
 }
 
 // InitializationProvider implementation for frontend settings
@@ -273,10 +226,6 @@ func (t *reaperTool) ValidateConfig(config map[string]interface{}) error {
 }
 
 func (t *reaperTool) InitializeWithConfig(config map[string]interface{}) error {
-	if t.agentContext == nil {
-		return fmt.Errorf("agent context not set")
-	}
-
 	// Save settings to agent directory
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -300,14 +249,28 @@ func main() {
 	// Parse plugin config from embedded YAML
 	config := pluginapi.ReadPluginConfig(configYAML)
 
+	// Create REAPER tool with base plugin
+	tool := &reaperTool{
+		BasePlugin: pluginapi.NewBasePlugin(
+			"ori-reaper",                      // Plugin name
+			config.Version,                    // Version from config
+			config.Requirements.MinOriVersion, // Min agent version
+			"",                                // Max agent version (no limit)
+			"v1",                              // API version
+		),
+		settingsManager: globalSettingsManager,
+		webpageProvider: webpage.NewProvider(globalSettingsManager),
+	}
+
+	// Set metadata from config
+	if metadata, err := config.ToMetadata(); err == nil {
+		tool.SetMetadata(metadata)
+	}
+
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: pluginapi.Handshake,
 		Plugins: map[string]plugin.Plugin{
-			"tool": &pluginapi.ToolRPCPlugin{Impl: &reaperTool{
-				config:          config,
-				settingsManager: globalSettingsManager,
-				webpageProvider: webpage.NewProvider(globalSettingsManager),
-			}},
+			"tool": &pluginapi.ToolRPCPlugin{Impl: tool},
 		},
 		GRPCServer: plugin.DefaultGRPCServer,
 	})
